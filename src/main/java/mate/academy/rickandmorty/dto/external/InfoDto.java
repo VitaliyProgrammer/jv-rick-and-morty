@@ -1,8 +1,8 @@
 package mate.academy.rickandmorty.dto.external;
 
 public record InfoDto(
-        int count,
-        int pages,
+        Integer count,
+        Integer pages,
         String next,
         String previous
 ) {}

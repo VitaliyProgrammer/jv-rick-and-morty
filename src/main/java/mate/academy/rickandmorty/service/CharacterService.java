@@ -1,6 +1,7 @@
 package mate.academy.rickandmorty.service;
 
 import java.util.List;
+import java.util.Optional;
 import mate.academy.rickandmorty.dto.CharacterResponseDto;
 
 public interface CharacterService {
@@ -8,5 +9,5 @@ public interface CharacterService {
 
     List<CharacterResponseDto> searchByName(String name);
 
-    CharacterResponseDto getRandomCharacter();
+    Optional<CharacterResponseDto> getRandomCharacter();
 }

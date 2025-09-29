@@ -9,13 +9,18 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
+import mate.academy.rickandmorty.config.DataLoader;
 import mate.academy.rickandmorty.dto.external.ExternalCharacterDto;
 import mate.academy.rickandmorty.dto.external.RickAndMortyResponseDto;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class RickAndMortyClient {
-    private static final String BASE_URL = "https://rickandmortyapi.com/api/character";
+    private static final Logger logger = LoggerFactory.getLogger(DataLoader.class);
+    private static final int MAX_RETRIES = 3;
+    private static String BASE_URL = "https://rickandmortyapi.com/api/character";
     private final ObjectMapper objectMapper;
 
     public RickAndMortyClient(ObjectMapper objectMapper) {
@@ -30,23 +35,47 @@ public class RickAndMortyClient {
 
         HttpClient httpClient = HttpClient.newHttpClient();
 
-        HttpRequest httpRequest = HttpRequest.newBuilder()
-                .GET()
-                .uri(URI.create(BASE_URL))
-                .build();
-        try {
-            HttpResponse<String> response = httpClient
-                    .send(httpRequest, HttpResponse.BodyHandlers.ofString());
+        while (BASE_URL != null) {
+            int attempt = 1;
 
-            System.out.println(response.body());
+            while (attempt <= MAX_RETRIES) {
+                try {
+                    HttpRequest httpRequest = HttpRequest.newBuilder()
+                            .GET()
+                            .uri(URI.create(BASE_URL))
+                            .build();
 
-            RickAndMortyResponseDto apiResponse = objectMapper
-                    .readValue(response.body(), RickAndMortyResponseDto.class);
+                    HttpResponse<String> response = httpClient
+                            .send(httpRequest, HttpResponse.BodyHandlers.ofString());
 
-            allCharacters.addAll(apiResponse.results());
+                    logger.debug("Fetched URL: {}, Status code: {}",
+                            BASE_URL, response.statusCode());
 
-        } catch (IOException | InterruptedException e) {
-            throw new RuntimeException("Failed to fetch information from Rick and Morty API ", e);
+                    RickAndMortyResponseDto apiResponse = objectMapper
+                            .readValue(response.body(), RickAndMortyResponseDto.class);
+
+                    allCharacters.addAll(apiResponse.results());
+                    BASE_URL = apiResponse.info().next();
+                    break;
+
+                } catch (IOException | InterruptedException e) {
+                    logger.warn("Attempt {}/{} failed for URL: {}",
+                            attempt, MAX_RETRIES, BASE_URL);
+
+                    if (attempt == MAX_RETRIES) {
+                        throw new RuntimeException("Failed after " + MAX_RETRIES
+                                + " attempts for URL: " + BASE_URL, e);
+                    }
+                }
+                attempt++;
+
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Thread interrupted during retry", e);
+                }
+            }
         }
         return allCharacters;
     }

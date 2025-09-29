@@ -1,33 +1,49 @@
 package mate.academy.rickandmorty.service.impl;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import mate.academy.rickandmorty.client.RickAndMortyClient;
+import mate.academy.rickandmorty.config.DataLoader;
 import mate.academy.rickandmorty.dto.CharacterResponseDto;
 import mate.academy.rickandmorty.dto.external.ExternalCharacterDto;
+import mate.academy.rickandmorty.mapper.CharacterMapper;
 import mate.academy.rickandmorty.model.Character;
 import mate.academy.rickandmorty.repository.CharacterRepository;
 import mate.academy.rickandmorty.service.CharacterService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class CharacterServiceImpl implements CharacterService {
 
+    private static final Logger logger = LoggerFactory.getLogger(DataLoader.class);
     private final CharacterRepository characterRepository;
     private final RickAndMortyClient rickAndMortyClient;
     private final Random random = new Random();
 
     @Override
+    @Transactional
     public void loadInitialData() {
-        System.out.println("loadInitialData() виконується...");
-        List<ExternalCharacterDto> externalCharacterDto = rickAndMortyClient.fetchAllCharacters();
-        System.out.println("Отримано персонажів: " + externalCharacterDto.size());
 
-        List<Character> toSaveDataEntity = externalCharacterDto.stream()
+        logger.info("Starting initial data load from external API...");
+        List<ExternalCharacterDto> externalCharacterDto = rickAndMortyClient.fetchAllCharacters();
+        logger.info("Received {} characters", externalCharacterDto.size());
+
+        Set<String> existingExternalIds = characterRepository.findAll().stream()
+                .map(Character::getExternalId)
+                .collect(Collectors.toSet());
+
+        List<Character> toSaveInitialData = externalCharacterDto.stream()
+                .filter(dto -> !existingExternalIds.contains(dto.id().toString()))
                 .map(dto -> {
                     Character character = new Character();
                     character.setExternalId(dto.id().toString());
@@ -38,8 +54,15 @@ public class CharacterServiceImpl implements CharacterService {
                 })
                 .toList();
 
-        characterRepository.saveAll(toSaveDataEntity);
-        System.out.println("Збережено у БД " + toSaveDataEntity.size() + " персонажів.");
+        if (toSaveInitialData.isEmpty()) {
+            logger.info("No new characters to save.");
+            return;
+        }
+
+        logger.info("Saving {} new characters", toSaveInitialData.size());
+
+        characterRepository.saveAll(toSaveInitialData);
+        logger.info("Initial data load finished.");
     }
 
     @Override
@@ -47,23 +70,22 @@ public class CharacterServiceImpl implements CharacterService {
         return (name == null || name.isBlank())
                 ? List.of() :
                 characterRepository.findByNameContainingIgnoreCase(name).stream()
-                        .map(this::toDto)
+                        .map(CharacterMapper::toDto)
                         .toList();
     }
 
     @Override
-    public CharacterResponseDto getRandomCharacter() {
-        List<Character> characters = characterRepository.findAll();
-        if (characters.isEmpty()) {
-            return null;
-        }
-        Character characterEntity = characters.get(random.nextInt(characters.size()));
-        return toDto(characterEntity);
-    }
+    public Optional<CharacterResponseDto> getRandomCharacter() {
 
-    private CharacterResponseDto toDto(Character character) {
-        return new CharacterResponseDto(character.getId(),
-                character.getExternalId(), character.getName(),
-                character.getStatus(), character.getGender());
+        long count = characterRepository.count();
+        if (count == 0) {
+            return Optional.empty();
+        }
+
+        int randomIndex = random.nextInt((int) count);
+        Page<Character> page = characterRepository.findAll(PageRequest.of(randomIndex, 1));
+
+        Character character = page.getContent().get(0);
+        return Optional.of(CharacterMapper.toDto(character));
     }
 }
