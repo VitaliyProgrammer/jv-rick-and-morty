@@ -1,13 +1,12 @@
 package mate.academy.rickandmorty.service.impl;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import mate.academy.rickandmorty.client.RickAndMortyClient;
-import mate.academy.rickandmorty.config.DataLoader;
 import mate.academy.rickandmorty.dto.CharacterResponseDto;
 import mate.academy.rickandmorty.dto.external.ExternalCharacterDto;
 import mate.academy.rickandmorty.mapper.CharacterMapper;
@@ -25,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class CharacterServiceImpl implements CharacterService {
 
-    private static final Logger logger = LoggerFactory.getLogger(DataLoader.class);
+    private static final Logger logger = LoggerFactory.getLogger(CharacterServiceImpl.class);
     private final CharacterRepository characterRepository;
     private final RickAndMortyClient rickAndMortyClient;
     private final Random random = new Random();
@@ -38,20 +37,11 @@ public class CharacterServiceImpl implements CharacterService {
         List<ExternalCharacterDto> externalCharacterDto = rickAndMortyClient.fetchAllCharacters();
         logger.info("Received {} characters", externalCharacterDto.size());
 
-        Set<String> existingExternalIds = characterRepository.findAll().stream()
-                .map(Character::getExternalId)
-                .collect(Collectors.toSet());
+        Set<String> existingExternalIds = new HashSet<>(characterRepository.findByExternalId());
 
         List<Character> toSaveInitialData = externalCharacterDto.stream()
                 .filter(dto -> !existingExternalIds.contains(dto.id().toString()))
-                .map(dto -> {
-                    Character character = new Character();
-                    character.setExternalId(dto.id().toString());
-                    character.setName(dto.name());
-                    character.setStatus(dto.status());
-                    character.setGender(dto.gender());
-                    return character;
-                })
+                .map(CharacterMapper::toEntity)
                 .toList();
 
         if (toSaveInitialData.isEmpty()) {
@@ -84,6 +74,11 @@ public class CharacterServiceImpl implements CharacterService {
 
         int randomIndex = random.nextInt((int) count);
         Page<Character> page = characterRepository.findAll(PageRequest.of(randomIndex, 1));
+
+        List<Character> existsContent = page.getContent();
+        if (existsContent.isEmpty()) {
+            return Optional.empty();
+        }
 
         Character character = page.getContent().get(0);
         return Optional.of(CharacterMapper.toDto(character));

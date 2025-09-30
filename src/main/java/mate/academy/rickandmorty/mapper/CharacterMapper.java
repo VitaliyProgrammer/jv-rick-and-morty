@@ -1,6 +1,7 @@
 package mate.academy.rickandmorty.mapper;
 
 import mate.academy.rickandmorty.dto.CharacterResponseDto;
+import mate.academy.rickandmorty.dto.external.ExternalCharacterDto;
 import mate.academy.rickandmorty.model.Character;
 
 public class CharacterMapper {
@@ -14,12 +15,12 @@ public class CharacterMapper {
         );
     }
 
-    public static Character toEntity(CharacterResponseDto characterResponseDto) {
+    public static Character toEntity(ExternalCharacterDto externalCharacterDto) {
         Character character = new Character();
-        character.setExternalId(characterResponseDto.externalId());
-        character.setName(characterResponseDto.name());
-        character.setStatus(characterResponseDto.status());
-        character.setGender(characterResponseDto.gender());
+        character.setExternalId(externalCharacterDto.id().toString());
+        character.setName(externalCharacterDto.name());
+        character.setStatus(externalCharacterDto.status());
+        character.setGender(externalCharacterDto.gender());
         return character;
     }
 }

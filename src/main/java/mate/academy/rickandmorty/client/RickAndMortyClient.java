@@ -9,7 +9,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
-import mate.academy.rickandmorty.config.DataLoader;
 import mate.academy.rickandmorty.dto.external.ExternalCharacterDto;
 import mate.academy.rickandmorty.dto.external.RickAndMortyResponseDto;
 import org.slf4j.Logger;
@@ -18,9 +17,11 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class RickAndMortyClient {
-    private static final Logger logger = LoggerFactory.getLogger(DataLoader.class);
+    private static final Logger logger =
+            LoggerFactory.getLogger(RickAndMortyClient.class);
+
+    private static final String BASE_URL = "https://rickandmortyapi.com/api/character";
     private static final int MAX_RETRIES = 3;
-    private static String BASE_URL = "https://rickandmortyapi.com/api/character";
     private final ObjectMapper objectMapper;
 
     public RickAndMortyClient(ObjectMapper objectMapper) {
@@ -35,7 +36,9 @@ public class RickAndMortyClient {
 
         HttpClient httpClient = HttpClient.newHttpClient();
 
-        while (BASE_URL != null) {
+        String pageUrl = BASE_URL;
+
+        while (pageUrl != null) {
             int attempt = 1;
 
             while (attempt <= MAX_RETRIES) {
@@ -51,16 +54,22 @@ public class RickAndMortyClient {
                     logger.debug("Fetched URL: {}, Status code: {}",
                             BASE_URL, response.statusCode());
 
+                    if (response.statusCode() != 200) {
+                        throw new RuntimeException("Failed to fetch characters. URL: "
+                                + " Status code: " + response.statusCode()
+                                + " Body: " + response.body());
+                    }
+
                     RickAndMortyResponseDto apiResponse = objectMapper
                             .readValue(response.body(), RickAndMortyResponseDto.class);
 
                     allCharacters.addAll(apiResponse.results());
-                    BASE_URL = apiResponse.info().next();
+                    pageUrl = apiResponse.info().next();
                     break;
 
                 } catch (IOException | InterruptedException e) {
                     logger.warn("Attempt {}/{} failed for URL: {}",
-                            attempt, MAX_RETRIES, BASE_URL);
+                            attempt, MAX_RETRIES, pageUrl, e);
 
                     if (attempt == MAX_RETRIES) {
                         throw new RuntimeException("Failed after " + MAX_RETRIES
